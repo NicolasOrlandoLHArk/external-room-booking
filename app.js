@@ -8,6 +8,8 @@ const ROOM_ICS_URLS = {
   modelokale_lille: "https://modelokalelille.no-022.workers.dev"
 };
 
+const BOOKING_RECIPIENT = "booking@example.com";
+const BOOKING_SUBJECT_PREFIX = "Booking request";
 const EVENTS_URL = "./events.json";
 const FIELD_IDS = ["room", "date", "start", "end", "name", "company", "email", "comment"];
 
@@ -18,7 +20,8 @@ const state = {
   liveEventsLoaded: false,
   usingFallbackCalendar: false,
   lastCalendarErrorMessage: "",
-  calendar: null
+  calendar: null,
+  lastSubmissionPayload: null
 };
 
 const form = document.getElementById("bookingForm");
@@ -28,6 +31,10 @@ const statusMessage = document.getElementById("statusMessage");
 const submitButton = document.getElementById("submitButton");
 const summaryBox = document.getElementById("summaryBox");
 const summaryText = document.getElementById("summaryText");
+const handoffNote = document.getElementById("handoffNote");
+const emailDraftLink = document.getElementById("emailDraftLink");
+const copyDetailsButton = document.getElementById("copyDetailsButton");
+const copyPayloadButton = document.getElementById("copyPayloadButton");
 const selectedRoomLabel = document.getElementById("selectedRoomLabel");
 const calendarLoading = document.getElementById("calendarLoading");
 const calendarError = document.getElementById("calendarError");
@@ -56,6 +63,8 @@ function bindEvents() {
     setActiveRoom(roomSelect.value);
   });
 
+  copyDetailsButton.addEventListener("click", handleCopyDetails);
+  copyPayloadButton.addEventListener("click", handleCopyPayload);
   form.addEventListener("submit", handleSubmit);
 }
 
@@ -303,6 +312,7 @@ function handleSubmit(event) {
   clearErrors();
   setStatus("");
   summaryBox.hidden = true;
+  state.lastSubmissionPayload = null;
 
   const payload = buildPayload();
   const validation = validatePayload(payload);
@@ -331,8 +341,10 @@ function handleSubmit(event) {
   const submissionPayload = buildSubmissionPayload(payload);
 
   submitButton.disabled = true;
+  state.lastSubmissionPayload = submissionPayload;
   renderSummary(submissionPayload);
-  setStatus("Forespørgslen ser god ud. Dette er en demo, så der er ikke oprettet en rigtig booking endnu.", "success");
+  configureHandoff(submissionPayload);
+  setStatus("Forespørgslen er klar. Åbn emailudkastet eller kopiér detaljerne nedenfor for at sende bookingønsket videre.", "success");
   submitButton.disabled = false;
 }
 
@@ -480,6 +492,106 @@ function buildSubmissionPayload(payload) {
 function renderSummary(payload) {
   summaryText.textContent = JSON.stringify(payload, null, 2);
   summaryBox.hidden = false;
+}
+
+function configureHandoff(payload) {
+  const emailSubject = `${BOOKING_SUBJECT_PREFIX}: ${payload.roomLabel} ${payload.date} ${payload.startTime}-${payload.endTime}`;
+  const emailBody = buildEmailBody(payload);
+  const hasRecipient = BOOKING_RECIPIENT && BOOKING_RECIPIENT !== "booking@example.com";
+
+  emailDraftLink.hidden = !hasRecipient;
+  copyDetailsButton.hidden = false;
+  copyPayloadButton.hidden = false;
+
+  if (hasRecipient) {
+    emailDraftLink.href = buildMailtoLink(BOOKING_RECIPIENT, emailSubject, emailBody);
+    handoffNote.textContent = `Emailudkastet sendes til ${BOOKING_RECIPIENT}. Hvis brugerens emailprogram ikke åbner, kan detaljerne kopieres i stedet.`;
+  } else {
+    emailDraftLink.removeAttribute("href");
+    handoffNote.textContent = "Sæt BOOKING_RECIPIENT i app.js før go-live. Indtil da kan bookingdetaljerne eller JSON kopieres herfra.";
+  }
+}
+
+function buildEmailBody(payload) {
+  return [
+    "Ny bookingforespørgsel",
+    "",
+    `Lokale: ${payload.roomLabel}`,
+    `Dato: ${payload.date}`,
+    `Tid: ${payload.startTime} - ${payload.endTime}`,
+    `Navn: ${payload.name}`,
+    `Firma: ${payload.company || "-"}`,
+    `Email: ${payload.email}`,
+    `Kommentar: ${payload.comment || "-"}`,
+    `Anmodet: ${payload.requestedAt}`,
+    "",
+    "JSON payload:",
+    JSON.stringify(payload, null, 2)
+  ].join("\n");
+}
+
+function buildMailtoLink(recipient, subject, body) {
+  return `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+async function handleCopyDetails() {
+  if (!state.lastSubmissionPayload) {
+    setStatus("Der er ingen bookingdetaljer at kopiere endnu.", "error");
+    return;
+  }
+
+  const copied = await copyTextToClipboard(buildEmailBody(state.lastSubmissionPayload));
+
+  if (copied) {
+    setStatus("Bookingdetaljerne er kopieret til udklipsholderen.", "success");
+  } else {
+    setStatus("Kunne ikke kopiere bookingdetaljerne automatisk.", "error");
+  }
+}
+
+async function handleCopyPayload() {
+  if (!state.lastSubmissionPayload) {
+    setStatus("Der er ingen JSON-payload at kopiere endnu.", "error");
+    return;
+  }
+
+  const copied = await copyTextToClipboard(JSON.stringify(state.lastSubmissionPayload, null, 2));
+
+  if (copied) {
+    setStatus("JSON-payload er kopieret til udklipsholderen.", "success");
+  } else {
+    setStatus("Kunne ikke kopiere JSON-payload automatisk.", "error");
+  }
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  const helper = document.createElement("textarea");
+  helper.value = text;
+  helper.setAttribute("readonly", "");
+  helper.style.position = "absolute";
+  helper.style.left = "-9999px";
+  document.body.appendChild(helper);
+  helper.select();
+
+  let copied = false;
+
+  try {
+    copied = document.execCommand("copy");
+  } catch (error) {
+    copied = false;
+  }
+
+  document.body.removeChild(helper);
+  return copied;
 }
 
 function getValue(id) {

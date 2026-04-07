@@ -23,7 +23,7 @@
       </div>
       <div class="hero-note">
         <strong>Ingen backend endnu</strong>
-        <span>Forespørgsler valideres i browseren og vises som payload-preview, klar til næste API-trin.</span>
+        <span>Forespørgsler valideres i browseren og kan sendes videre som emailudkast eller kopieres direkte.</span>
       </div>
     </section>
 
@@ -142,6 +142,14 @@
           <section id="summaryBox" class="payload-preview" hidden>
             <h3>Payload preview</h3>
             <pre id="summaryText"></pre>
+            <div class="handoff-box">
+              <p id="handoffNote" class="handoff-note"></p>
+              <div class="handoff-actions">
+                <a id="emailDraftLink" class="secondary-button" href="#" hidden>Åbn emailudkast</a>
+                <button id="copyDetailsButton" type="button" class="secondary-button" hidden>Kopiér bookingdetaljer</button>
+                <button id="copyPayloadButton" type="button" class="secondary-button" hidden>Kopiér JSON</button>
+              </div>
+            </div>
           </section>
         </form>
       </div>
