@@ -8,6 +8,11 @@ const ROOM_ICS_URLS = {
   modelokale_lille: "https://modelokalelille.no-022.workers.dev"
 };
 
+const API_CONFIG = {
+  availabilityBaseUrl: "",
+  bookingRequestUrl: ""
+};
+
 const BOOKING_RECIPIENT = "booking@example.com";
 const BOOKING_SUBJECT_PREFIX = "Booking request";
 const EVENTS_URL = "./events.json";
@@ -183,7 +188,7 @@ function initializeCalendar() {
 
 async function loadFallbackEvents() {
   try {
-    const rawData = await fetchAvailabilityData(state.activeRoom);
+    const rawData = await fetchLocalFallbackData();
     state.fallbackEvents = normalizeEvents(rawData);
     state.fallbackLoaded = true;
     evaluateCurrentSelection();
@@ -201,12 +206,33 @@ async function loadFallbackEvents() {
   }
 }
 
+function hasConfiguredAvailabilityApi() {
+  return Boolean(API_CONFIG.availabilityBaseUrl && API_CONFIG.availabilityBaseUrl.trim());
+}
+
+function hasConfiguredBookingApi() {
+  return Boolean(API_CONFIG.bookingRequestUrl && API_CONFIG.bookingRequestUrl.trim());
+}
+
 function buildAvailabilityUrl(room) {
+  if (hasConfiguredAvailabilityApi()) {
+    const separator = API_CONFIG.availabilityBaseUrl.includes("?") ? "&" : "?";
+    return `${API_CONFIG.availabilityBaseUrl}${separator}room=${encodeURIComponent(room)}`;
+  }
+
   return EVENTS_URL;
 }
 
 async function fetchAvailabilityData(room) {
-  const response = await fetch(buildAvailabilityUrl(room), {
+  return fetchJson(buildAvailabilityUrl(room), "Kunne ikke indlæse kalenderdata.");
+}
+
+async function fetchLocalFallbackData() {
+  return fetchJson(EVENTS_URL, "events.json kunne ikke indlæses. Tjek at filen findes i samme mappe som index.html.");
+}
+
+async function fetchJson(url, defaultErrorMessage) {
+  const response = await fetch(url, {
     cache: "no-store",
     headers: {
       Accept: "application/json"
@@ -214,13 +240,13 @@ async function fetchAvailabilityData(room) {
   });
 
   if (!response.ok) {
-    throw new Error("events.json kunne ikke indlæses. Tjek at filen findes i samme mappe som index.html.");
+    throw new Error(defaultErrorMessage);
   }
 
   return response.json();
 }
 
-function normalizeEvents(source) {
+function normalizeEvents(source, roomHint = "") {
   const events = Array.isArray(source)
     ? source
     : source && Array.isArray(source.events)
@@ -228,20 +254,22 @@ function normalizeEvents(source) {
       : null;
 
   if (!events) {
-    throw new Error("events.json har ugyldigt format. Brug enten et array eller et objekt med en events-liste.");
+    throw new Error("Kalenderdata har ugyldigt format. Brug enten et array eller et objekt med en events-liste.");
   }
 
   return events
-    .map((event, index) => normalizeEvent(event, index))
+    .map((event, index) => normalizeEvent(event, index, roomHint))
     .filter(Boolean);
 }
 
-function normalizeEvent(event, index) {
+function normalizeEvent(event, index, roomHint = "") {
   if (!event || typeof event !== "object") {
     return null;
   }
 
-  const room = typeof event.room === "string" ? event.room.trim() : "";
+  const room = typeof event.room === "string" && event.room.trim()
+    ? event.room.trim()
+    : roomHint;
   const start = typeof event.start === "string" ? event.start.trim() : "";
   const end = typeof event.end === "string" ? event.end.trim() : "";
 
@@ -273,12 +301,45 @@ function buildIcsEventSource(room) {
   };
 }
 
+function buildApiEventSource(room) {
+  return {
+    id: `api-${room}`,
+    events: async (_fetchInfo, successCallback, failureCallback) => {
+      try {
+        const rawData = await fetchAvailabilityData(room);
+        const events = normalizeEvents(rawData, room)
+          .filter((event) => event.room === room)
+          .map((event) => ({
+            id: event.id,
+            title: event.title,
+            start: event.start,
+            end: event.end
+          }));
+
+        successCallback(events);
+      } catch (error) {
+        failureCallback(error);
+      }
+    }
+  };
+}
+
 function updateCalendarSource(room) {
   if (!state.calendar) {
     return;
   }
 
   removeAllEventSources();
+
+  state.liveEventsLoaded = false;
+  state.usingFallbackCalendar = false;
+  calendarLoading.hidden = false;
+  calendarError.hidden = true;
+
+  if (hasConfiguredAvailabilityApi()) {
+    state.calendar.addEventSource(buildApiEventSource(room));
+    return;
+  }
 
   const icsUrl = ROOM_ICS_URLS[room];
 
@@ -287,10 +348,6 @@ function updateCalendarSource(room) {
     return;
   }
 
-  state.liveEventsLoaded = false;
-  state.usingFallbackCalendar = false;
-  calendarLoading.hidden = false;
-  calendarError.hidden = true;
   state.calendar.addEventSource(buildIcsEventSource(room));
 }
 
@@ -359,7 +416,7 @@ function activateFallbackCalendar(room, message) {
   evaluateCurrentSelection();
 }
 
-function handleSubmit(event) {
+async function handleSubmit(event) {
   event.preventDefault();
   clearErrors();
   setStatus("");
@@ -393,9 +450,52 @@ function handleSubmit(event) {
   submitButton.disabled = true;
   state.lastSubmissionPayload = submissionPayload;
   renderSummary(submissionPayload);
+
+  if (hasConfiguredBookingApi()) {
+    setStatus("Sender bookingforespørgsel...", "success");
+
+    try {
+      const response = await submitBookingRequest(submissionPayload);
+      configureSubmittedState(submissionPayload, response);
+      setStatus(response.message || "Bookingforespørgslen er sendt.", "success");
+    } catch (error) {
+      configureHandoff(submissionPayload);
+      setStatus(`Automatisk afsendelse mislykkedes. Du kan stadig bruge emailudkast eller kopiér detaljerne. Fejl: ${error.message}`, "error");
+    } finally {
+      submitButton.disabled = false;
+    }
+
+    return;
+  }
+
   configureHandoff(submissionPayload);
   setStatus("Forespørgslen er klar. Åbn emailudkastet eller kopiér detaljerne nedenfor for at sende bookingønsket videre.", "success");
   submitButton.disabled = false;
+}
+
+async function submitBookingRequest(payload) {
+  const response = await fetch(API_CONFIG.bookingRequestUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const body = contentType.includes("application/json")
+    ? await response.json()
+    : { message: await response.text() };
+
+  if (!response.ok) {
+    throw new Error(body.message || "Bookingforespørgslen kunne ikke sendes.");
+  }
+
+  return {
+    message: body.message || "Bookingforespørgslen er sendt.",
+    reference: body.reference || body.requestId || body.id || ""
+  };
 }
 
 function hasAvailabilityData(room) {
@@ -756,6 +856,26 @@ function findNextAvailableSlot(payload, events) {
     endTime: formatTimeForInput(suggestedEnd),
     label: `${formatDateForDisplay(cursor)} kl. ${formatTimeForInput(cursor)}-${formatTimeForInput(suggestedEnd)}`
   };
+}
+
+function configureSubmittedState(payload, response) {
+  emailDraftLink.hidden = true;
+  copyDetailsButton.hidden = false;
+  copyPayloadButton.hidden = false;
+
+  handoffNote.textContent = response.reference
+    ? `Forespørgslen er sendt til bookingsystemet. Reference: ${response.reference}.`
+    : "Forespørgslen er sendt til bookingsystemet.";
+
+  summaryText.textContent = JSON.stringify(
+    {
+      ...payload,
+      submissionStatus: "sent",
+      reference: response.reference || null
+    },
+    null,
+    2
+  );
 }
 
 function configureHandoff(payload) {
