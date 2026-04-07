@@ -62,7 +62,7 @@
               Viser kalender for
               <strong id="selectedRoomLabel">Mødelokale stor</strong>
             </p>
-            <p class="calendar-help">Bookede tider vises direkte i kalenderen nedenfor.</p>
+            <p class="calendar-help">Klik på en dag eller markér et ledigt tidsrum for at udfylde formularen automatisk.</p>
           </div>
 
           <div id="calendarLoading" class="notice notice-loading">Loading calendar...</div>
@@ -77,6 +77,11 @@
             <p class="section-kicker">Forespørgsel</p>
             <h2>Send bookingønske</h2>
           </div>
+        </div>
+
+        <div id="selectionHint" class="selection-hint" hidden>
+          <p id="selectionHintText" class="selection-hint-text"></p>
+          <button id="clearSelectionButton" type="button" class="secondary-button" hidden>Ryd valgt tidspunkt</button>
         </div>
 
         <form id="bookingForm" novalidate>

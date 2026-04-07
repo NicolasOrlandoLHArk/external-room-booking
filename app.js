@@ -35,6 +35,9 @@ const handoffNote = document.getElementById("handoffNote");
 const emailDraftLink = document.getElementById("emailDraftLink");
 const copyDetailsButton = document.getElementById("copyDetailsButton");
 const copyPayloadButton = document.getElementById("copyPayloadButton");
+const selectionHint = document.getElementById("selectionHint");
+const selectionHintText = document.getElementById("selectionHintText");
+const clearSelectionButton = document.getElementById("clearSelectionButton");
 const selectedRoomLabel = document.getElementById("selectedRoomLabel");
 const calendarLoading = document.getElementById("calendarLoading");
 const calendarError = document.getElementById("calendarError");
@@ -65,6 +68,7 @@ function bindEvents() {
 
   copyDetailsButton.addEventListener("click", handleCopyDetails);
   copyPayloadButton.addEventListener("click", handleCopyPayload);
+  clearSelectionButton.addEventListener("click", clearSelectedTime);
   form.addEventListener("submit", handleSubmit);
 }
 
@@ -105,12 +109,44 @@ function initializeCalendar() {
       list: "Liste"
     },
     noEventsContent: "Ingen bookinger i den viste periode.",
+    selectable: true,
+    selectMirror: true,
+    selectOverlap: false,
+    selectAllow(info) {
+      return !isBeforeToday(info.start);
+    },
     eventContent(arg) {
       const container = document.createElement("div");
       container.textContent = arg.timeText
         ? `${arg.timeText} • ${arg.event.title}`
         : arg.event.title;
       return { domNodes: [container] };
+    },
+    dateClick(info) {
+      if (isBeforeToday(info.date)) {
+        setStatus("Du kan kun vælge tidsrum fra i dag og frem.", "error");
+        return;
+      }
+
+      if (info.allDay) {
+        applyCalendarSelection({
+          start: `${info.dateStr}T09:00:00`,
+          end: `${info.dateStr}T10:00:00`,
+          allDay: false
+        });
+        return;
+      }
+
+      const start = new Date(info.date);
+      const end = new Date(start.getTime() + 60 * 60000);
+      applyCalendarSelection({
+        start,
+        end,
+        allDay: false
+      });
+    },
+    select(info) {
+      applyCalendarSelection(info);
     },
     loading(isLoading) {
       calendarLoading.hidden = !isLoading;
@@ -267,6 +303,7 @@ function setActiveRoom(room) {
   state.activeRoom = room;
   roomSelect.value = room;
   updateRoomUi(room);
+  clearSelectedTime();
   updateCalendarSource(room);
 }
 
@@ -494,6 +531,73 @@ function renderSummary(payload) {
   summaryBox.hidden = false;
 }
 
+function applyCalendarSelection(selectionInfo) {
+  const normalizedSelection = normalizeSelection(selectionInfo);
+
+  if (!normalizedSelection) {
+    return;
+  }
+
+  document.getElementById("date").value = normalizedSelection.date;
+  document.getElementById("start").value = normalizedSelection.startTime;
+  document.getElementById("end").value = normalizedSelection.endTime;
+  roomSelect.value = state.activeRoom;
+  updateSelectionHint(normalizedSelection);
+  setStatus("Tidsrummet er overført til formularen.", "success");
+  document.getElementById("date").focus();
+}
+
+function normalizeSelection(selectionInfo) {
+  const startDate = selectionInfo.start instanceof Date ? selectionInfo.start : new Date(selectionInfo.start);
+  let endDate = selectionInfo.end instanceof Date ? selectionInfo.end : new Date(selectionInfo.end);
+
+  if (Number.isNaN(startDate.getTime())) {
+    return null;
+  }
+
+  if (selectionInfo.allDay) {
+    endDate = new Date(startDate.getTime() + 60 * 60000);
+  }
+
+  if (Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+    endDate = new Date(startDate.getTime() + 60 * 60000);
+  }
+
+  const maxEndDate = new Date(startDate);
+  maxEndDate.setHours(18, 0, 0, 0);
+
+  if (endDate > maxEndDate) {
+    endDate = maxEndDate;
+  }
+
+  if (endDate <= startDate) {
+    endDate = new Date(startDate.getTime() + 30 * 60000);
+  }
+
+  return {
+    date: formatDateForInput(startDate),
+    startTime: formatTimeForInput(startDate),
+    endTime: formatTimeForInput(endDate),
+    label: `${formatDateForDisplay(startDate)} kl. ${formatTimeForInput(startDate)}-${formatTimeForInput(endDate)}`
+  };
+}
+
+function updateSelectionHint(selection) {
+  selectionHint.hidden = false;
+  clearSelectionButton.hidden = false;
+  selectionHintText.textContent = `Valgt tidsrum: ${selection.label}`;
+}
+
+function clearSelectedTime() {
+  if (state.calendar) {
+    state.calendar.unselect();
+  }
+
+  selectionHint.hidden = true;
+  clearSelectionButton.hidden = true;
+  selectionHintText.textContent = "";
+}
+
 function configureHandoff(payload) {
   const emailSubject = `${BOOKING_SUBJECT_PREFIX}: ${payload.roomLabel} ${payload.date} ${payload.startTime}-${payload.endTime}`;
   const emailBody = buildEmailBody(payload);
@@ -631,6 +735,38 @@ function getTodayLocalDateString() {
   const now = new Date();
   const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
   return localDate.toISOString().slice(0, 10);
+}
+
+function isBeforeToday(date) {
+  const candidate = new Date(date);
+  candidate.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return candidate < today;
+}
+
+function formatDateForInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatTimeForInput(date) {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function formatDateForDisplay(date) {
+  return new Intl.DateTimeFormat("da-DK", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
 }
 
 function combineDateAndTime(dateString, timeString) {
