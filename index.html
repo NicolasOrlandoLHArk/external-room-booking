@@ -21,10 +21,6 @@
           Kalenderen læser direkte fra lokalernes aktuelle kalenderfeed og bruger lokal fallback-data hvis feedet fejler.
         </p>
       </div>
-      <div class="hero-note">
-        <strong>Booking er live</strong>
-        <span>Ledighed hentes fra API'et, og bookingforespørgsler sendes direkte til backend.</span>
-      </div>
     </section>
 
     <section class="layout" aria-label="Meeting room booking">
@@ -151,15 +147,12 @@
 
           <p id="statusMessage" class="status-message" aria-live="polite"></p>
 
-          <section id="summaryBox" class="payload-preview" hidden>
-            <h3>Payload preview</h3>
-            <pre id="summaryText"></pre>
+          <section id="handoffBox" class="handoff-panel" hidden>
             <div class="handoff-box">
               <p id="handoffNote" class="handoff-note"></p>
               <div class="handoff-actions">
                 <a id="emailDraftLink" class="secondary-button" href="#" hidden>Åbn emailudkast</a>
                 <button id="copyDetailsButton" type="button" class="secondary-button" hidden>Kopiér bookingdetaljer</button>
-                <button id="copyPayloadButton" type="button" class="secondary-button" hidden>Kopiér JSON</button>
               </div>
             </div>
           </section>
