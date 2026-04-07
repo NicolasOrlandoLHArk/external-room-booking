@@ -164,7 +164,13 @@ textarea {
   font-size: 0.95rem;
 }
 
+.calendar-loading {
+  margin: 8px 0 14px;
+  color: var(--muted);
+}
+
 #calendar {
+  min-height: 700px;
   margin-top: 10px;
 }
 
@@ -282,5 +288,9 @@ button:disabled {
 
   .actions button {
     width: 100%;
+  }
+
+  #calendar {
+    min-height: 500px;
   }
 }
