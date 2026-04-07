@@ -3,13 +3,17 @@ const ROOM_LABELS = {
   modelokale_lille: "Mødelokale lille"
 };
 
+const ROOM_CALENDAR_URLS = {
+  modelokale_stor: "https://nicolasorlandolhark.github.io/modelokale_stor_display/",
+  modelokale_lille: "https://nicolasorlandolhark.github.io/modelokale_lille_display/"
+};
+
 const EVENTS_URL = "./events.json";
 const FIELD_IDS = ["room", "date", "start", "end", "name", "company", "email", "comment"];
 
 const state = {
   activeRoom: "modelokale_stor",
   allEvents: [],
-  calendar: null,
   eventsLoaded: false
 };
 
@@ -23,14 +27,17 @@ const summaryText = document.getElementById("summaryText");
 const selectedRoomLabel = document.getElementById("selectedRoomLabel");
 const calendarLoading = document.getElementById("calendarLoading");
 const calendarError = document.getElementById("calendarError");
+const calendarFrame = document.getElementById("calendarFrame");
+const calendarLink = document.getElementById("calendarLink");
 const dateInput = document.getElementById("date");
+let frameLoadTimer = null;
 
 function initializePage() {
   dateInput.min = getTodayLocalDateString();
   roomSelect.value = state.activeRoom;
   updateRoomUi(state.activeRoom);
   bindEvents();
-  initializeCalendar();
+  initializeEmbeddedCalendar();
   loadEvents();
 }
 
@@ -51,47 +58,24 @@ function bindEvents() {
   form.addEventListener("submit", handleSubmit);
 }
 
-function initializeCalendar() {
-  if (!window.FullCalendar) {
-    showCalendarError("FullCalendar kunne ikke indlæses fra CDN.");
+function initializeEmbeddedCalendar() {
+  if (!calendarFrame) {
+    showCalendarError("Kalenderområdet kunne ikke initialiseres.");
     return;
   }
 
-  const calendarElement = document.getElementById("calendar");
-
-  state.calendar = new FullCalendar.Calendar(calendarElement, {
-    initialView: window.innerWidth < 760 ? "listWeek" : "timeGridWeek",
-    locale: "da",
-    firstDay: 1,
-    height: "auto",
-    nowIndicator: true,
-    allDaySlot: false,
-    slotMinTime: "07:00:00",
-    slotMaxTime: "19:00:00",
-    slotDuration: "00:30:00",
-    expandRows: true,
-    eventTimeFormat: {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false
-    },
-    headerToolbar: {
-      left: "prev,next today",
-      center: "title",
-      right: "timeGridWeek,dayGridMonth,listWeek"
-    },
-    buttonText: {
-      today: "I dag",
-      week: "Uge",
-      month: "Måned",
-      list: "Liste"
-    },
-    noEventsContent: "Ingen bookinger i den viste periode.",
-    events: []
+  calendarFrame.addEventListener("load", () => {
+    clearTimeout(frameLoadTimer);
+    calendarLoading.hidden = true;
+    calendarError.hidden = true;
   });
 
-  state.calendar.render();
-  calendarLoading.hidden = true;
+  calendarFrame.addEventListener("error", () => {
+    clearTimeout(frameLoadTimer);
+    showCalendarError("Kalenderen kunne ikke indlæses i siden. Brug linket nedenfor for at åbne den i en ny fane.");
+  });
+
+  updateEmbeddedCalendar(state.activeRoom);
 }
 
 async function loadEvents() {
@@ -100,11 +84,9 @@ async function loadEvents() {
     state.allEvents = normalizeEvents(rawData);
     state.eventsLoaded = true;
     calendarError.hidden = true;
-    refreshCalendarEvents();
   } catch (error) {
     state.allEvents = [];
     state.eventsLoaded = false;
-    refreshCalendarEvents();
     showCalendarError(error.message || "Kunne ikke indlæse bookings.");
   }
 }
@@ -173,23 +155,6 @@ function normalizeEvent(event, index) {
   };
 }
 
-function refreshCalendarEvents() {
-  if (!state.calendar) {
-    return;
-  }
-
-  state.calendar.removeAllEvents();
-
-  getEventsForRoom(state.activeRoom).forEach((event) => {
-    state.calendar.addEvent({
-      id: event.id,
-      title: event.title,
-      start: event.start,
-      end: event.end
-    });
-  });
-}
-
 function getEventsForRoom(room) {
   return state.allEvents.filter((event) => event.room === room);
 }
@@ -202,7 +167,7 @@ function setActiveRoom(room) {
   state.activeRoom = room;
   roomSelect.value = room;
   updateRoomUi(room);
-  refreshCalendarEvents();
+  updateEmbeddedCalendar(room);
 }
 
 function updateRoomUi(room) {
@@ -213,6 +178,27 @@ function updateRoomUi(room) {
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-selected", String(isActive));
   });
+}
+
+function updateEmbeddedCalendar(room) {
+  const calendarUrl = ROOM_CALENDAR_URLS[room];
+
+  if (!calendarUrl) {
+    showCalendarError("Der findes ingen kalender-URL for det valgte lokale.");
+    return;
+  }
+
+  clearTimeout(frameLoadTimer);
+  calendarLoading.hidden = false;
+  calendarError.hidden = true;
+  calendarLink.href = calendarUrl;
+  calendarFrame.src = calendarUrl;
+
+  frameLoadTimer = window.setTimeout(() => {
+    if (!calendarLoading.hidden) {
+      showCalendarError("Kalenderen bruger for lang tid på at indlæse. Du kan stadig åbne den i en ny fane.");
+    }
+  }, 8000);
 }
 
 function handleSubmit(event) {
@@ -403,6 +389,7 @@ function setStatus(message, type) {
 function showCalendarError(message) {
   calendarError.textContent = message;
   calendarError.hidden = false;
+  calendarLoading.hidden = true;
 }
 
 function getTodayLocalDateString() {

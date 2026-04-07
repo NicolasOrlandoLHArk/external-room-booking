@@ -63,12 +63,23 @@
               Viser kalender for
               <strong id="selectedRoomLabel">Mødelokale stor</strong>
             </p>
-            <p class="calendar-help">Bookede tider vises direkte i kalenderen.</p>
+            <p class="calendar-help">Kalenderen vises fra den separate GitHub Pages-visning for lokalet.</p>
           </div>
 
           <div id="calendarLoading" class="notice notice-loading">Loading calendar...</div>
           <div id="calendarError" class="notice notice-error" hidden></div>
-          <div id="calendar"></div>
+          <div class="iframe-shell">
+            <iframe
+              id="calendarFrame"
+              title="Room calendar"
+              loading="lazy"
+              referrerpolicy="strict-origin-when-cross-origin"
+            ></iframe>
+          </div>
+          <p class="calendar-link-row">
+            Kan du ikke se kalenderen?
+            <a id="calendarLink" href="https://nicolasorlandolhark.github.io/modelokale_stor_display/" target="_blank" rel="noopener noreferrer">Åbn kalender i ny fane</a>
+          </p>
         </div>
       </div>
 
@@ -148,8 +159,6 @@
       </div>
     </section>
   </main>
-
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
