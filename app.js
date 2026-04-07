@@ -20,6 +20,7 @@ const BOOKING_RECIPIENTS = {
 const BOOKING_SUBJECT_PREFIX = "Booking request";
 const EVENTS_URL = "./events.json";
 const FIELD_IDS = ["room", "date", "start", "end", "name", "company", "email", "comment"];
+const API_FETCH_TIMEOUT_MS = 12000;
 
 const state = {
   activeRoom: "modelokale_stor",
@@ -38,12 +39,10 @@ const roomSelect = document.getElementById("room");
 const roomSwitch = document.getElementById("roomSwitch");
 const statusMessage = document.getElementById("statusMessage");
 const submitButton = document.getElementById("submitButton");
-const summaryBox = document.getElementById("summaryBox");
-const summaryText = document.getElementById("summaryText");
+const handoffBox = document.getElementById("handoffBox");
 const handoffNote = document.getElementById("handoffNote");
 const emailDraftLink = document.getElementById("emailDraftLink");
 const copyDetailsButton = document.getElementById("copyDetailsButton");
-const copyPayloadButton = document.getElementById("copyPayloadButton");
 const availabilityPanel = document.getElementById("availabilityPanel");
 const availabilityText = document.getElementById("availabilityText");
 const useSuggestedSlotButton = document.getElementById("useSuggestedSlotButton");
@@ -85,7 +84,6 @@ function bindEvents() {
   });
 
   copyDetailsButton.addEventListener("click", handleCopyDetails);
-  copyPayloadButton.addEventListener("click", handleCopyPayload);
   useSuggestedSlotButton.addEventListener("click", applySuggestedSlot);
   clearSelectionButton.addEventListener("click", clearSelectedTime);
   form.addEventListener("submit", handleSubmit);
@@ -235,12 +233,32 @@ async function fetchLocalFallbackData() {
 }
 
 async function fetchJson(url, defaultErrorMessage) {
-  const response = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      Accept: "application/json"
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(), API_FETCH_TIMEOUT_MS)
+    : 0;
+
+  let response;
+
+  try {
+    response = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json"
+      },
+      signal: controller ? controller.signal : undefined
+    });
+  } catch (error) {
+    if (controller && error && error.name === "AbortError") {
+      throw new Error(`${defaultErrorMessage} Request timed out.`);
     }
-  });
+
+    throw new Error(defaultErrorMessage);
+  } finally {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  }
 
   if (!response.ok) {
     throw new Error(defaultErrorMessage);
@@ -307,22 +325,23 @@ function buildIcsEventSource(room) {
 function buildApiEventSource(room) {
   return {
     id: `api-${room}`,
-    events: async (_fetchInfo, successCallback, failureCallback) => {
-      try {
-        const rawData = await fetchAvailabilityData(room);
-        const events = normalizeEvents(rawData, room)
+    events(fetchInfo, successCallback, failureCallback) {
+      fetchAvailabilityData(room)
+        .then((rawData) => normalizeEvents(rawData, room))
+        .then((events) => events
           .filter((event) => event.room === room)
           .map((event) => ({
             id: event.id,
             title: event.title,
             start: event.start,
             end: event.end
-          }));
-
-        successCallback(events);
-      } catch (error) {
-        failureCallback(error);
-      }
+          })))
+        .then((events) => {
+          successCallback(events);
+        })
+        .catch((error) => {
+          failureCallback(error);
+        });
     }
   };
 }
@@ -423,7 +442,7 @@ async function handleSubmit(event) {
   event.preventDefault();
   clearErrors();
   setStatus("");
-  summaryBox.hidden = true;
+  handoffBox.hidden = true;
   state.lastSubmissionPayload = null;
 
   const payload = buildPayload();
@@ -647,8 +666,8 @@ function buildSubmissionPayload(payload) {
 }
 
 function renderSummary(payload) {
-  summaryText.textContent = JSON.stringify(payload, null, 2);
-  summaryBox.hidden = false;
+  state.lastSubmissionPayload = payload;
+  handoffBox.hidden = false;
 }
 
 function applyCalendarSelection(selectionInfo) {
@@ -862,23 +881,13 @@ function findNextAvailableSlot(payload, events) {
 }
 
 function configureSubmittedState(payload, response) {
+  handoffBox.hidden = false;
   emailDraftLink.hidden = true;
   copyDetailsButton.hidden = false;
-  copyPayloadButton.hidden = false;
 
   handoffNote.textContent = response.reference
     ? `Forespørgslen er sendt til bookingsystemet. Reference: ${response.reference}.`
     : "Forespørgslen er sendt til bookingsystemet.";
-
-  summaryText.textContent = JSON.stringify(
-    {
-      ...payload,
-      submissionStatus: "sent",
-      reference: response.reference || null
-    },
-    null,
-    2
-  );
 }
 
 function configureHandoff(payload) {
@@ -887,9 +896,9 @@ function configureHandoff(payload) {
   const recipient = BOOKING_RECIPIENTS[payload.room] || "";
   const hasRecipient = Boolean(recipient);
 
+  handoffBox.hidden = false;
   emailDraftLink.hidden = !hasRecipient;
   copyDetailsButton.hidden = false;
-  copyPayloadButton.hidden = false;
 
   if (hasRecipient) {
     emailDraftLink.href = buildMailtoLink(recipient, emailSubject, emailBody);
@@ -934,21 +943,6 @@ async function handleCopyDetails() {
     setStatus("Bookingdetaljerne er kopieret til udklipsholderen.", "success");
   } else {
     setStatus("Kunne ikke kopiere bookingdetaljerne automatisk.", "error");
-  }
-}
-
-async function handleCopyPayload() {
-  if (!state.lastSubmissionPayload) {
-    setStatus("Der er ingen JSON-payload at kopiere endnu.", "error");
-    return;
-  }
-
-  const copied = await copyTextToClipboard(JSON.stringify(state.lastSubmissionPayload, null, 2));
-
-  if (copied) {
-    setStatus("JSON-payload er kopieret til udklipsholderen.", "success");
-  } else {
-    setStatus("Kunne ikke kopiere JSON-payload automatisk.", "error");
   }
 }
 
