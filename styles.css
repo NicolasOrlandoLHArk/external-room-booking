@@ -151,6 +151,37 @@ textarea {
   line-height: 1.5;
 }
 
+.availability-panel {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.availability-panel.is-available {
+  background: var(--success-bg);
+  border-color: rgba(20, 83, 45, 0.14);
+}
+
+.availability-panel.is-unavailable {
+  background: #fff5f5;
+  border-color: rgba(153, 27, 27, 0.14);
+}
+
+.availability-panel.is-neutral {
+  background: #eef5fb;
+  border-color: rgba(15, 76, 129, 0.18);
+}
+
+.availability-text {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.availability-actions {
+  margin-top: 10px;
+}
+
 .room-switch {
   display: flex;
   gap: 10px;

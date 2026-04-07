@@ -21,7 +21,8 @@ const state = {
   usingFallbackCalendar: false,
   lastCalendarErrorMessage: "",
   calendar: null,
-  lastSubmissionPayload: null
+  lastSubmissionPayload: null,
+  suggestedSlot: null
 };
 
 const form = document.getElementById("bookingForm");
@@ -35,6 +36,9 @@ const handoffNote = document.getElementById("handoffNote");
 const emailDraftLink = document.getElementById("emailDraftLink");
 const copyDetailsButton = document.getElementById("copyDetailsButton");
 const copyPayloadButton = document.getElementById("copyPayloadButton");
+const availabilityPanel = document.getElementById("availabilityPanel");
+const availabilityText = document.getElementById("availabilityText");
+const useSuggestedSlotButton = document.getElementById("useSuggestedSlotButton");
 const selectionHint = document.getElementById("selectionHint");
 const selectionHintText = document.getElementById("selectionHintText");
 const clearSelectionButton = document.getElementById("clearSelectionButton");
@@ -66,8 +70,15 @@ function bindEvents() {
     setActiveRoom(roomSelect.value);
   });
 
+  ["date", "start", "end"].forEach((id) => {
+    const input = document.getElementById(id);
+    input.addEventListener("input", evaluateCurrentSelection);
+    input.addEventListener("change", evaluateCurrentSelection);
+  });
+
   copyDetailsButton.addEventListener("click", handleCopyDetails);
   copyPayloadButton.addEventListener("click", handleCopyPayload);
+  useSuggestedSlotButton.addEventListener("click", applySuggestedSlot);
   clearSelectionButton.addEventListener("click", clearSelectedTime);
   form.addEventListener("submit", handleSubmit);
 }
@@ -92,6 +103,12 @@ function initializeCalendar() {
     slotDuration: "00:30:00",
     expandRows: true,
     displayEventEnd: true,
+    selectable: true,
+    selectMirror: true,
+    selectOverlap: false,
+    selectAllow(info) {
+      return !isBeforeToday(info.start);
+    },
     eventTimeFormat: {
       hour: "2-digit",
       minute: "2-digit",
@@ -109,12 +126,6 @@ function initializeCalendar() {
       list: "Liste"
     },
     noEventsContent: "Ingen bookinger i den viste periode.",
-    selectable: true,
-    selectMirror: true,
-    selectOverlap: false,
-    selectAllow(info) {
-      return !isBeforeToday(info.start);
-    },
     eventContent(arg) {
       const container = document.createElement("div");
       container.textContent = arg.timeText
@@ -154,6 +165,7 @@ function initializeCalendar() {
       if (!isLoading && !state.usingFallbackCalendar) {
         state.liveEventsLoaded = true;
         calendarError.hidden = true;
+        evaluateCurrentSelection();
       }
     },
     eventSourceFailure() {
@@ -174,6 +186,7 @@ async function loadFallbackEvents() {
     const rawData = await fetchAvailabilityData(state.activeRoom);
     state.fallbackEvents = normalizeEvents(rawData);
     state.fallbackLoaded = true;
+    evaluateCurrentSelection();
 
     if (state.usingFallbackCalendar) {
       activateFallbackCalendar(state.activeRoom, state.lastCalendarErrorMessage || "Viser fallback-bookinger fra events.json.");
@@ -305,6 +318,7 @@ function setActiveRoom(room) {
   updateRoomUi(room);
   clearSelectedTime();
   updateCalendarSource(room);
+  evaluateCurrentSelection();
 }
 
 function updateRoomUi(room) {
@@ -342,6 +356,7 @@ function activateFallbackCalendar(room, message) {
   }
 
   showCalendarError(message);
+  evaluateCurrentSelection();
 }
 
 function handleSubmit(event) {
@@ -364,9 +379,7 @@ function handleSubmit(event) {
     return;
   }
 
-  const availabilityEvents = getAvailabilityEvents(payload.room);
-
-  const overlapEvent = findOverlap(payload, availabilityEvents);
+  const overlapEvent = findOverlap(payload, getAvailabilityEvents(payload.room));
 
   if (overlapEvent) {
     setError("start", "Det valgte tidsrum overlapper med en eksisterende booking.");
@@ -450,9 +463,13 @@ function validatePayload(payload) {
   if (payload.date && payload.start && payload.end) {
     const startDate = combineDateAndTime(payload.date, payload.start);
     const endDate = combineDateAndTime(payload.date, payload.end);
+    const now = new Date();
 
     if (!startDate || !endDate) {
       setError("start", "Ugyldig dato eller tid.");
+      valid = false;
+    } else if (startDate < now) {
+      setError("start", "Starttid må ikke ligge i fortiden.");
       valid = false;
     } else if (endDate <= startDate) {
       setError("end", "Sluttid skal være senere end starttid.");
@@ -543,6 +560,7 @@ function applyCalendarSelection(selectionInfo) {
   document.getElementById("end").value = normalizedSelection.endTime;
   roomSelect.value = state.activeRoom;
   updateSelectionHint(normalizedSelection);
+  evaluateCurrentSelection();
   setStatus("Tidsrummet er overført til formularen.", "success");
   document.getElementById("date").focus();
 }
@@ -564,7 +582,7 @@ function normalizeSelection(selectionInfo) {
   }
 
   const maxEndDate = new Date(startDate);
-  maxEndDate.setHours(18, 0, 0, 0);
+  maxEndDate.setHours(19, 0, 0, 0);
 
   if (endDate > maxEndDate) {
     endDate = maxEndDate;
@@ -596,6 +614,148 @@ function clearSelectedTime() {
   selectionHint.hidden = true;
   clearSelectionButton.hidden = true;
   selectionHintText.textContent = "";
+}
+
+function evaluateCurrentSelection() {
+  const payload = buildPayload();
+
+  if (!payload.room || !payload.date || !payload.start || !payload.end) {
+    resetAvailabilityPanel();
+    return;
+  }
+
+  const requestedWindow = getRequestedWindow(payload);
+
+  if (!requestedWindow) {
+    showAvailabilityState("neutral", "Vælg et gyldigt tidsrum for at tjekke ledighed.");
+    return;
+  }
+
+  if (!hasAvailabilityData(payload.room)) {
+    showAvailabilityState("neutral", "Kalenderdata indlæses stadig. Vent et øjeblik og prøv igen.");
+    return;
+  }
+
+  const availabilityEvents = getAvailabilityEvents(payload.room);
+  const overlapEvent = findOverlap(payload, availabilityEvents);
+
+  if (!overlapEvent) {
+    showAvailabilityState("available", "Det valgte tidsrum ser ledigt ud.");
+    return;
+  }
+
+  const suggestion = findNextAvailableSlot(payload, availabilityEvents);
+
+  if (suggestion) {
+    state.suggestedSlot = suggestion;
+    showAvailabilityState(
+      "unavailable",
+      `Det valgte tidsrum overlapper med en eksisterende booking. Næste ledige forslag er ${suggestion.label}.`,
+      true
+    );
+    return;
+  }
+
+  state.suggestedSlot = null;
+  showAvailabilityState("unavailable", "Det valgte tidsrum overlapper med en eksisterende booking, og der blev ikke fundet en ledig tid senere samme dag.");
+}
+
+function showAvailabilityState(kind, message, showSuggestionButton = false) {
+  availabilityPanel.hidden = false;
+  availabilityPanel.className = "availability-panel field-full";
+  availabilityText.textContent = message;
+  useSuggestedSlotButton.hidden = !showSuggestionButton;
+
+  if (kind) {
+    availabilityPanel.classList.add(`is-${kind}`);
+  }
+}
+
+function resetAvailabilityPanel() {
+  state.suggestedSlot = null;
+  availabilityPanel.hidden = true;
+  availabilityPanel.className = "availability-panel field-full";
+  availabilityText.textContent = "";
+  useSuggestedSlotButton.hidden = true;
+}
+
+function applySuggestedSlot() {
+  if (!state.suggestedSlot) {
+    return;
+  }
+
+  document.getElementById("date").value = state.suggestedSlot.date;
+  document.getElementById("start").value = state.suggestedSlot.startTime;
+  document.getElementById("end").value = state.suggestedSlot.endTime;
+  updateSelectionHint(state.suggestedSlot);
+  evaluateCurrentSelection();
+  setStatus("Næste ledige tidsrum er indsat i formularen.", "success");
+}
+
+function getRequestedWindow(payload) {
+  const startDate = combineDateAndTime(payload.date, payload.start);
+  const endDate = combineDateAndTime(payload.date, payload.end);
+  const now = new Date();
+
+  if (!startDate || !endDate || endDate <= startDate || startDate < now) {
+    return null;
+  }
+
+  return {
+    start: startDate,
+    end: endDate,
+    durationMs: endDate.getTime() - startDate.getTime()
+  };
+}
+
+function findNextAvailableSlot(payload, events) {
+  const requestedWindow = getRequestedWindow(payload);
+
+  if (!requestedWindow) {
+    return null;
+  }
+
+  const dayStart = combineDateAndTime(payload.date, "00:00");
+  const dayEnd = combineDateAndTime(payload.date, "23:59");
+  const businessEnd = combineDateAndTime(payload.date, "19:00");
+
+  if (!dayStart || !dayEnd || !businessEnd) {
+    return null;
+  }
+
+  const sameDayEvents = events
+    .map((event) => ({
+      start: event.start instanceof Date ? event.start : new Date(event.start),
+      end: event.end instanceof Date ? event.end : new Date(event.end)
+    }))
+    .filter((event) => !Number.isNaN(event.start.getTime()) && !Number.isNaN(event.end.getTime()))
+    .filter((event) => event.end > dayStart && event.start < dayEnd)
+    .sort((left, right) => left.start - right.start);
+
+  let cursor = roundUpToNearestMinutes(requestedWindow.start, 30);
+
+  sameDayEvents.forEach((event) => {
+    if (event.end <= cursor) {
+      return;
+    }
+
+    if (cursor >= event.start) {
+      cursor = roundUpToNearestMinutes(event.end, 30);
+    }
+  });
+
+  const suggestedEnd = new Date(cursor.getTime() + requestedWindow.durationMs);
+
+  if (suggestedEnd > businessEnd) {
+    return null;
+  }
+
+  return {
+    date: formatDateForInput(cursor),
+    startTime: formatTimeForInput(cursor),
+    endTime: formatTimeForInput(suggestedEnd),
+    label: `${formatDateForDisplay(cursor)} kl. ${formatTimeForInput(cursor)}-${formatTimeForInput(suggestedEnd)}`
+  };
 }
 
 function configureHandoff(payload) {
@@ -767,6 +927,14 @@ function formatDateForDisplay(date) {
     month: "2-digit",
     year: "numeric"
   }).format(date);
+}
+
+function roundUpToNearestMinutes(date, stepMinutes) {
+  const rounded = new Date(date);
+  const millisecondsPerStep = stepMinutes * 60000;
+  rounded.setSeconds(0, 0);
+  rounded.setTime(Math.ceil(rounded.getTime() / millisecondsPerStep) * millisecondsPerStep);
+  return rounded;
 }
 
 function combineDateAndTime(dateString, timeString) {
