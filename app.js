@@ -9,7 +9,7 @@ const ROOM_ICS_URLS = {
 };
 
 const API_CONFIG = {
-  availabilityBaseUrl: "https://meeting-room-booking-api.no-022.workers.dev/api/availability",
+  availabilityBaseUrl: "",
   bookingRequestUrl: "https://meeting-room-booking-api.no-022.workers.dev/api/booking-request"
 };
 
