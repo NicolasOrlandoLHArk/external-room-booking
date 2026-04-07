@@ -3,9 +3,9 @@ const ROOM_LABELS = {
   modelokale_lille: "Mødelokale lille"
 };
 
-const ROOM_CALENDAR_URLS = {
-  modelokale_stor: "https://nicolasorlandolhark.github.io/modelokale_stor_display/",
-  modelokale_lille: "https://nicolasorlandolhark.github.io/modelokale_lille_display/"
+const ROOM_ICS_URLS = {
+  modelokale_stor: "https://modelokalestor.no-022.workers.dev",
+  modelokale_lille: "https://modelokalelille.no-022.workers.dev"
 };
 
 const EVENTS_URL = "./events.json";
@@ -13,8 +13,12 @@ const FIELD_IDS = ["room", "date", "start", "end", "name", "company", "email", "
 
 const state = {
   activeRoom: "modelokale_stor",
-  allEvents: [],
-  eventsLoaded: false
+  fallbackEvents: [],
+  fallbackLoaded: false,
+  liveEventsLoaded: false,
+  usingFallbackCalendar: false,
+  lastCalendarErrorMessage: "",
+  calendar: null
 };
 
 const form = document.getElementById("bookingForm");
@@ -27,18 +31,15 @@ const summaryText = document.getElementById("summaryText");
 const selectedRoomLabel = document.getElementById("selectedRoomLabel");
 const calendarLoading = document.getElementById("calendarLoading");
 const calendarError = document.getElementById("calendarError");
-const calendarFrame = document.getElementById("calendarFrame");
-const calendarLink = document.getElementById("calendarLink");
 const dateInput = document.getElementById("date");
-let frameLoadTimer = null;
 
 function initializePage() {
   dateInput.min = getTodayLocalDateString();
   roomSelect.value = state.activeRoom;
   updateRoomUi(state.activeRoom);
   bindEvents();
-  initializeEmbeddedCalendar();
-  loadEvents();
+  initializeCalendar();
+  loadFallbackEvents();
 }
 
 function bindEvents() {
@@ -58,36 +59,87 @@ function bindEvents() {
   form.addEventListener("submit", handleSubmit);
 }
 
-function initializeEmbeddedCalendar() {
-  if (!calendarFrame) {
-    showCalendarError("Kalenderområdet kunne ikke initialiseres.");
+function initializeCalendar() {
+  if (!window.FullCalendar) {
+    showCalendarError("Kalenderbiblioteket kunne ikke indlæses.");
     return;
   }
 
-  calendarFrame.addEventListener("load", () => {
-    clearTimeout(frameLoadTimer);
-    calendarLoading.hidden = true;
-    calendarError.hidden = true;
+  const calendarElement = document.getElementById("calendar");
+
+  state.calendar = new FullCalendar.Calendar(calendarElement, {
+    locale: "da",
+    initialView: window.innerWidth < 760 ? "listWeek" : "timeGridWeek",
+    firstDay: 1,
+    height: "auto",
+    nowIndicator: true,
+    allDaySlot: false,
+    slotMinTime: "07:00:00",
+    slotMaxTime: "19:00:00",
+    slotDuration: "00:30:00",
+    expandRows: true,
+    displayEventEnd: true,
+    eventTimeFormat: {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    },
+    headerToolbar: {
+      left: "prev,next today",
+      center: "title",
+      right: "timeGridWeek,dayGridMonth,listWeek"
+    },
+    buttonText: {
+      today: "I dag",
+      week: "Uge",
+      month: "Måned",
+      list: "Liste"
+    },
+    noEventsContent: "Ingen bookinger i den viste periode.",
+    eventContent(arg) {
+      const container = document.createElement("div");
+      container.textContent = arg.timeText
+        ? `${arg.timeText} • ${arg.event.title}`
+        : arg.event.title;
+      return { domNodes: [container] };
+    },
+    loading(isLoading) {
+      calendarLoading.hidden = !isLoading;
+
+      if (!isLoading && !state.usingFallbackCalendar) {
+        state.liveEventsLoaded = true;
+        calendarError.hidden = true;
+      }
+    },
+    eventSourceFailure() {
+      state.liveEventsLoaded = false;
+      activateFallbackCalendar(
+        state.activeRoom,
+        "Live kalenderfeed kunne ikke indlæses. Viser fallback-bookinger fra events.json."
+      );
+    }
   });
 
-  calendarFrame.addEventListener("error", () => {
-    clearTimeout(frameLoadTimer);
-    showCalendarError("Kalenderen kunne ikke indlæses i siden. Brug linket nedenfor for at åbne den i en ny fane.");
-  });
-
-  updateEmbeddedCalendar(state.activeRoom);
+  state.calendar.render();
+  updateCalendarSource(state.activeRoom);
 }
 
-async function loadEvents() {
+async function loadFallbackEvents() {
   try {
     const rawData = await fetchAvailabilityData(state.activeRoom);
-    state.allEvents = normalizeEvents(rawData);
-    state.eventsLoaded = true;
-    calendarError.hidden = true;
+    state.fallbackEvents = normalizeEvents(rawData);
+    state.fallbackLoaded = true;
+
+    if (state.usingFallbackCalendar) {
+      activateFallbackCalendar(state.activeRoom, state.lastCalendarErrorMessage || "Viser fallback-bookinger fra events.json.");
+    }
   } catch (error) {
-    state.allEvents = [];
-    state.eventsLoaded = false;
-    showCalendarError(error.message || "Kunne ikke indlæse bookings.");
+    state.fallbackEvents = [];
+    state.fallbackLoaded = false;
+
+    if (!state.liveEventsLoaded) {
+      showCalendarError(error.message || "Kunne ikke indlæse bookings.");
+    }
   }
 }
 
@@ -155,8 +207,47 @@ function normalizeEvent(event, index) {
   };
 }
 
-function getEventsForRoom(room) {
-  return state.allEvents.filter((event) => event.room === room);
+function buildIcsEventSource(room) {
+  return {
+    id: `ics-${room}`,
+    url: ROOM_ICS_URLS[room],
+    format: "ics"
+  };
+}
+
+function updateCalendarSource(room) {
+  if (!state.calendar) {
+    return;
+  }
+
+  removeAllEventSources();
+
+  const icsUrl = ROOM_ICS_URLS[room];
+
+  if (!icsUrl) {
+    activateFallbackCalendar(room, "Der findes ingen live kalenderfeed for det valgte lokale.");
+    return;
+  }
+
+  state.liveEventsLoaded = false;
+  state.usingFallbackCalendar = false;
+  calendarLoading.hidden = false;
+  calendarError.hidden = true;
+  state.calendar.addEventSource(buildIcsEventSource(room));
+}
+
+function removeAllEventSources() {
+  if (!state.calendar) {
+    return;
+  }
+
+  state.calendar.getEventSources().forEach((source) => {
+    source.remove();
+  });
+}
+
+function getFallbackEventsForRoom(room) {
+  return state.fallbackEvents.filter((event) => event.room === room);
 }
 
 function setActiveRoom(room) {
@@ -167,7 +258,7 @@ function setActiveRoom(room) {
   state.activeRoom = room;
   roomSelect.value = room;
   updateRoomUi(room);
-  updateEmbeddedCalendar(room);
+  updateCalendarSource(room);
 }
 
 function updateRoomUi(room) {
@@ -180,25 +271,31 @@ function updateRoomUi(room) {
   });
 }
 
-function updateEmbeddedCalendar(room) {
-  const calendarUrl = ROOM_CALENDAR_URLS[room];
+function activateFallbackCalendar(room, message) {
+  state.usingFallbackCalendar = true;
+  state.lastCalendarErrorMessage = message;
+  calendarLoading.hidden = true;
 
-  if (!calendarUrl) {
-    showCalendarError("Der findes ingen kalender-URL for det valgte lokale.");
+  if (!state.calendar) {
+    showCalendarError(message);
     return;
   }
 
-  clearTimeout(frameLoadTimer);
-  calendarLoading.hidden = false;
-  calendarError.hidden = true;
-  calendarLink.href = calendarUrl;
-  calendarFrame.src = calendarUrl;
+  removeAllEventSources();
+  state.calendar.removeAllEvents();
 
-  frameLoadTimer = window.setTimeout(() => {
-    if (!calendarLoading.hidden) {
-      showCalendarError("Kalenderen bruger for lang tid på at indlæse. Du kan stadig åbne den i en ny fane.");
-    }
-  }, 8000);
+  if (state.fallbackLoaded) {
+    getFallbackEventsForRoom(room).forEach((event) => {
+      state.calendar.addEvent({
+        id: event.id,
+        title: event.title,
+        start: event.start,
+        end: event.end
+      });
+    });
+  }
+
+  showCalendarError(message);
 }
 
 function handleSubmit(event) {
@@ -206,11 +303,6 @@ function handleSubmit(event) {
   clearErrors();
   setStatus("");
   summaryBox.hidden = true;
-
-  if (!state.eventsLoaded) {
-    setStatus("Ledighedsdata er ikke tilgængelige lige nu. Prøv igen, når kalenderdata er indlæst.", "error");
-    return;
-  }
 
   const payload = buildPayload();
   const validation = validatePayload(payload);
@@ -220,7 +312,14 @@ function handleSubmit(event) {
     return;
   }
 
-  const overlapEvent = findOverlap(payload);
+  if (!hasAvailabilityData(payload.room)) {
+    setStatus("Der er ingen tilgængelige kalenderdata at validere imod lige nu. Prøv igen om et øjeblik.", "error");
+    return;
+  }
+
+  const availabilityEvents = getAvailabilityEvents(payload.room);
+
+  const overlapEvent = findOverlap(payload, availabilityEvents);
 
   if (overlapEvent) {
     setError("start", "Det valgte tidsrum overlapper med en eksisterende booking.");
@@ -235,6 +334,29 @@ function handleSubmit(event) {
   renderSummary(submissionPayload);
   setStatus("Forespørgslen ser god ud. Dette er en demo, så der er ikke oprettet en rigtig booking endnu.", "success");
   submitButton.disabled = false;
+}
+
+function hasAvailabilityData(room) {
+  if (room === state.activeRoom && state.liveEventsLoaded && !state.usingFallbackCalendar) {
+    return true;
+  }
+
+  return state.fallbackLoaded;
+}
+
+function getAvailabilityEvents(room) {
+  if (room === state.activeRoom && state.calendar && state.liveEventsLoaded && !state.usingFallbackCalendar) {
+    return state.calendar.getEvents().map((event) => ({
+      start: event.start,
+      end: event.end || event.start
+    }));
+  }
+
+  if (state.fallbackLoaded) {
+    return getFallbackEventsForRoom(room);
+  }
+
+  return [];
 }
 
 function buildPayload() {
@@ -315,7 +437,7 @@ function validatePayload(payload) {
   return { valid };
 }
 
-function findOverlap(payload) {
+function findOverlap(payload, events) {
   const requestedStart = combineDateAndTime(payload.date, payload.start);
   const requestedEnd = combineDateAndTime(payload.date, payload.end);
 
@@ -323,9 +445,9 @@ function findOverlap(payload) {
     return null;
   }
 
-  return getEventsForRoom(payload.room).find((event) => {
-    const eventStart = new Date(event.start);
-    const eventEnd = new Date(event.end);
+  return events.find((event) => {
+    const eventStart = event.start instanceof Date ? event.start : new Date(event.start);
+    const eventEnd = event.end instanceof Date ? event.end : new Date(event.end);
 
     if (Number.isNaN(eventStart.getTime()) || Number.isNaN(eventEnd.getTime())) {
       return false;
@@ -387,6 +509,7 @@ function setStatus(message, type) {
 }
 
 function showCalendarError(message) {
+  state.lastCalendarErrorMessage = message;
   calendarError.textContent = message;
   calendarError.hidden = false;
   calendarLoading.hidden = true;

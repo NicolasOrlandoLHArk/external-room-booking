@@ -5,10 +5,8 @@
   --text: #142033;
   --muted: #627089;
   --line: #d6deea;
-  --line-strong: #a9b7ca;
   --brand: #0f4c81;
   --brand-strong: #0a3559;
-  --brand-soft: #d8e8f5;
   --success-text: #14532d;
   --success-bg: #e8f7ec;
   --error-text: #991b1b;
@@ -216,29 +214,8 @@ textarea {
   border: 1px solid rgba(153, 27, 27, 0.18);
 }
 
-.iframe-shell {
+#calendar {
   padding: 14px;
-}
-
-#calendarFrame {
-  display: block;
-  width: 100%;
-  min-height: 760px;
-  border: 0;
-  border-radius: 16px;
-  background: #ffffff;
-}
-
-.calendar-link-row {
-  margin: 0;
-  padding: 0 18px 18px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.calendar-link-row a {
-  color: var(--brand);
-  font-weight: 600;
 }
 
 .form-grid {
@@ -370,6 +347,50 @@ textarea {
   font-family: Consolas, "SFMono-Regular", Menlo, monospace;
 }
 
+.fc {
+  --fc-border-color: var(--line);
+  --fc-button-bg-color: var(--brand);
+  --fc-button-border-color: var(--brand);
+  --fc-button-hover-bg-color: var(--brand-strong);
+  --fc-button-hover-border-color: var(--brand-strong);
+  --fc-button-active-bg-color: var(--brand-strong);
+  --fc-button-active-border-color: var(--brand-strong);
+  --fc-page-bg-color: #ffffff;
+  --fc-neutral-bg-color: #f8fafc;
+  --fc-today-bg-color: rgba(15, 76, 129, 0.08);
+  --fc-list-event-hover-bg-color: #f5f8fc;
+  --fc-event-bg-color: #d97706;
+  --fc-event-border-color: #d97706;
+}
+
+.fc .fc-toolbar.fc-header-toolbar {
+  margin-bottom: 1em;
+  gap: 12px;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.1rem;
+}
+
+.fc .fc-button {
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: none;
+  box-shadow: none;
+}
+
+.fc .fc-event {
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+
+.fc .fc-timegrid-slot-label-cushion,
+.fc .fc-col-header-cell-cushion,
+.fc .fc-list-day-text,
+.fc .fc-list-day-side-text {
+  color: var(--muted);
+}
+
 @media (max-width: 980px) {
   .layout {
     grid-template-columns: 1fr;
@@ -410,11 +431,19 @@ textarea {
     grid-column: auto;
   }
 
-  .iframe-shell {
+  #calendar {
     padding: 10px;
   }
 
-  #calendarFrame {
-    min-height: 640px;
+  .fc .fc-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fc .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 }
