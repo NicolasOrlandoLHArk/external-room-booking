@@ -1,286 +1,126 @@
-:root {
-  --bg: #f5f6f8;
-  --card: #ffffff;
-  --panel: #ffffff;
-  --text: #1f2937;
-  --muted: #6b7280;
-  --border: #d1d5db;
-  --border-strong: #9ca3af;
-  --error: #b91c1c;
-  --ok: #065f46;
-  --ok-bg: #ecfdf5;
-  --ok-border: #a7f3d0;
-  --warn-bg: #fffbeb;
-  --warn-border: #fcd34d;
-  --button: #111827;
-  --button-text: #ffffff;
-  --button-secondary: #e5e7eb;
-  --button-secondary-text: #111827;
-  --button-disabled: #9ca3af;
-  --summary-bg: #f9fafb;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meeting Room Booking</title>
+  <meta name="description" content="External meeting room booking page" />
+  <link rel="stylesheet" href="styles.css" />
 
-* {
-  box-sizing: border-box;
-}
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js"></script>
+</head>
+<body>
+  <main class="page">
+    <section class="card">
+      <header class="header">
+        <p class="eyebrow">External booking</p>
+        <h1>Book a meeting room</h1>
+        <p class="intro">
+          Select a room to view its calendar. Existing bookings are shown below.
+          Then choose a free time slot and submit your request.
+        </p>
+      </header>
 
-html, body {
-  margin: 0;
-  padding: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-}
+      <div class="top-grid">
+        <section class="panel">
+          <h2>Calendar</h2>
 
-body {
-  min-height: 100vh;
-}
+          <div class="field">
+            <label for="calendarRoom">Room</label>
+            <select id="calendarRoom">
+              <option value="modelokale_stor">Mødelokale stor</option>
+              <option value="modelokale_lille">Mødelokale lille</option>
+            </select>
+          </div>
 
-.page {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 28px 18px;
-}
+          <div class="legend">
+            <span><strong>Booked</strong> = occupied</span>
+            <span><strong>Available</strong> = no booking shown</span>
+          </div>
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-  padding: 24px;
-}
+          <div id="calendarLoading" class="calendar-loading">Loading calendar…</div>
+          <div id="calendar"></div>
+        </section>
 
-.header {
-  margin-bottom: 24px;
-}
+        <section class="panel">
+          <h2>Request booking</h2>
 
-.eyebrow {
-  margin: 0 0 8px;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
+          <form id="bookingForm" novalidate>
+            <div class="grid">
+              <div class="field full">
+                <label for="room">Room</label>
+                <select id="room" name="room" required>
+                  <option value="modelokale_stor">Mødelokale stor</option>
+                  <option value="modelokale_lille">Mødelokale lille</option>
+                </select>
+                <p class="error" id="roomError"></p>
+              </div>
 
-h1 {
-  margin: 0 0 10px;
-  font-size: 2rem;
-}
+              <div class="field">
+                <label for="date">Date</label>
+                <input id="date" name="date" type="date" required />
+                <p class="error" id="dateError"></p>
+              </div>
 
-h2 {
-  margin: 0 0 16px;
-  font-size: 1.2rem;
-}
+              <div class="field">
+                <label for="start">Start time</label>
+                <input id="start" name="start" type="time" required />
+                <p class="error" id="startError"></p>
+              </div>
 
-h3 {
-  margin: 0 0 10px;
-  font-size: 1rem;
-}
+              <div class="field">
+                <label for="end">End time</label>
+                <input id="end" name="end" type="time" required />
+                <p class="error" id="endError"></p>
+              </div>
 
-.intro {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.6;
-}
+              <div class="field full">
+                <label for="name">Your name</label>
+                <input id="name" name="name" type="text" maxlength="100" required />
+                <p class="error" id="nameError"></p>
+              </div>
 
-.top-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 20px;
-  align-items: start;
-}
+              <div class="field full">
+                <label for="company">Company</label>
+                <input id="company" name="company" type="text" maxlength="100" />
+                <p class="error" id="companyError"></p>
+              </div>
 
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 18px;
-}
+              <div class="field full">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" maxlength="150" required />
+                <p class="error" id="emailError"></p>
+              </div>
 
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
+              <div class="field full">
+                <label for="note">Comment</label>
+                <textarea id="note" name="note" rows="4" maxlength="500"></textarea>
+                <p class="error" id="noteError"></p>
+              </div>
+            </div>
 
-.field {
-  display: flex;
-  flex-direction: column;
-}
+            <div class="availability-box" id="availabilityBox" hidden>
+              <h3>Availability check</h3>
+              <p id="availabilityText"></p>
+            </div>
 
-.field.full {
-  grid-column: 1 / -1;
-}
+            <div class="summary" id="summaryBox" hidden>
+              <h3>Request preview</h3>
+              <pre id="summaryText"></pre>
+            </div>
 
-label {
-  font-weight: 600;
-  margin-bottom: 8px;
-}
+            <div class="actions">
+              <button id="checkButton" type="button">Check availability</button>
+              <button id="submitButton" type="submit">Submit request</button>
+            </div>
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
-}
+            <p class="status" id="statusMessage" aria-live="polite"></p>
+          </form>
+        </section>
+      </div>
+    </section>
+  </main>
 
-input,
-select,
-textarea {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  color: var(--text);
-  background: #fff;
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-  outline: 2px solid transparent;
-  border-color: var(--border-strong);
-}
-
-textarea {
-  min-height: 100px;
-  resize: vertical;
-}
-
-.error {
-  min-height: 18px;
-  margin: 6px 0 0;
-  font-size: 0.9rem;
-  color: var(--error);
-}
-
-.legend {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 0.95rem;
-}
-
-#calendar {
-  margin-top: 10px;
-}
-
-.fc {
-  max-width: 100%;
-}
-
-.availability-box,
-.summary {
-  margin-top: 18px;
-  padding: 14px;
-  border-radius: 12px;
-}
-
-.availability-box {
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-border);
-}
-
-.summary {
-  background: var(--summary-bg);
-  border: 1px solid var(--border);
-}
-
-.summary pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: Consolas, Monaco, monospace;
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 20px;
-}
-
-button {
-  border: 0;
-  border-radius: 10px;
-  padding: 12px 18px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-#checkButton {
-  background: var(--button-secondary);
-  color: var(--button-secondary-text);
-}
-
-#submitButton {
-  background: var(--button);
-  color: var(--button-text);
-}
-
-button:disabled {
-  background: var(--button-disabled);
-  color: #fff;
-  cursor: not-allowed;
-}
-
-.status {
-  margin-top: 16px;
-  min-height: 24px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.status.success {
-  color: var(--ok);
-  background: var(--ok-bg);
-  border: 1px solid var(--ok-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-
-.status.error {
-  color: var(--error);
-}
-
-@media (max-width: 1100px) {
-  .top-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 700px) {
-  .page {
-    padding: 18px 12px;
-  }
-
-  .card,
-  .panel {
-    padding: 16px;
-  }
-
-  .grid {
-    grid-template-columns: 1fr;
-  }
-
-  .field.full {
-    grid-column: auto;
-  }
-
-  h1 {
-    font-size: 1.6rem;
-  }
-
-  .actions {
-    flex-direction: column;
-  }
-
-  .actions button {
-    width: 100%;
-  }
-}
+  <script src="app.js"></script>
+</body>
+</html>
