@@ -174,10 +174,6 @@ textarea {
   margin-top: 10px;
 }
 
-.fc {
-  max-width: 100%;
-}
-
 .availability-box,
 .summary {
   margin-top: 18px;
