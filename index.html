@@ -3,12 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Book a Meeting Room</title>
-  <meta
-    name="description"
-    content="External booking request form for meeting rooms."
-  />
+  <title>Meeting Room Booking</title>
+  <meta name="description" content="External meeting room booking page" />
+
   <link rel="stylesheet" href="styles.css" />
+
+  <!-- FullCalendar browser bundle -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.css"
+    rel="stylesheet"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 </head>
 <body>
   <main class="page">
@@ -17,78 +22,107 @@
         <p class="eyebrow">External booking</p>
         <h1>Book a meeting room</h1>
         <p class="intro">
-          Select a room, date, and time, then submit your request.
-          This first version only validates and captures the request.
-          It does not create a real booking yet.
+          Select a room to view its calendar. Existing bookings are shown below.
+          Then choose a free time slot and submit your request.
         </p>
       </header>
 
-      <form id="bookingForm" novalidate>
-        <div class="grid">
-          <div class="field full">
-            <label for="room">Room</label>
-            <select id="room" name="room" required>
-              <option value="">Select room</option>
+      <div class="top-grid">
+        <section class="panel">
+          <h2>Calendar</h2>
+
+          <div class="field">
+            <label for="calendarRoom">Room</label>
+            <select id="calendarRoom">
               <option value="modelokale_stor">Mødelokale stor</option>
               <option value="modelokale_lille">Mødelokale lille</option>
             </select>
-            <p class="error" id="roomError"></p>
           </div>
 
-          <div class="field">
-            <label for="date">Date</label>
-            <input id="date" name="date" type="date" required />
-            <p class="error" id="dateError"></p>
+          <div id="calendarLegend" class="legend">
+            <span><strong>Booked</strong> = occupied</span>
+            <span><strong>Available</strong> = no booking shown</span>
           </div>
 
-          <div class="field">
-            <label for="start">Start time</label>
-            <input id="start" name="start" type="time" required />
-            <p class="error" id="startError"></p>
-          </div>
+          <div id="calendar"></div>
+        </section>
 
-          <div class="field">
-            <label for="end">End time</label>
-            <input id="end" name="end" type="time" required />
-            <p class="error" id="endError"></p>
-          </div>
+        <section class="panel">
+          <h2>Request booking</h2>
 
-          <div class="field">
-            <label for="name">Your name</label>
-            <input id="name" name="name" type="text" maxlength="100" required />
-            <p class="error" id="nameError"></p>
-          </div>
+          <form id="bookingForm" novalidate>
+            <div class="grid">
+              <div class="field full">
+                <label for="room">Room</label>
+                <select id="room" name="room" required>
+                  <option value="modelokale_stor">Mødelokale stor</option>
+                  <option value="modelokale_lille">Mødelokale lille</option>
+                </select>
+                <p class="error" id="roomError"></p>
+              </div>
 
-          <div class="field">
-            <label for="company">Company</label>
-            <input id="company" name="company" type="text" maxlength="100" />
-            <p class="error" id="companyError"></p>
-          </div>
+              <div class="field">
+                <label for="date">Date</label>
+                <input id="date" name="date" type="date" required />
+                <p class="error" id="dateError"></p>
+              </div>
 
-          <div class="field full">
-            <label for="email">Email</label>
-            <input id="email" name="email" type="email" maxlength="150" required />
-            <p class="error" id="emailError"></p>
-          </div>
+              <div class="field">
+                <label for="start">Start time</label>
+                <input id="start" name="start" type="time" required />
+                <p class="error" id="startError"></p>
+              </div>
 
-          <div class="field full">
-            <label for="note">Comment</label>
-            <textarea id="note" name="note" rows="4" maxlength="500"></textarea>
-            <p class="error" id="noteError"></p>
-          </div>
-        </div>
+              <div class="field">
+                <label for="end">End time</label>
+                <input id="end" name="end" type="time" required />
+                <p class="error" id="endError"></p>
+              </div>
 
-        <div class="summary" id="summaryBox" hidden>
-          <h2>Request preview</h2>
-          <pre id="summaryText"></pre>
-        </div>
+              <div class="field full">
+                <label for="name">Your name</label>
+                <input id="name" name="name" type="text" maxlength="100" required />
+                <p class="error" id="nameError"></p>
+              </div>
 
-        <div class="actions">
-          <button id="submitButton" type="submit">Submit request</button>
-        </div>
+              <div class="field full">
+                <label for="company">Company</label>
+                <input id="company" name="company" type="text" maxlength="100" />
+                <p class="error" id="companyError"></p>
+              </div>
 
-        <p class="status" id="statusMessage" aria-live="polite"></p>
-      </form>
+              <div class="field full">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" maxlength="150" required />
+                <p class="error" id="emailError"></p>
+              </div>
+
+              <div class="field full">
+                <label for="note">Comment</label>
+                <textarea id="note" name="note" rows="4" maxlength="500"></textarea>
+                <p class="error" id="noteError"></p>
+              </div>
+            </div>
+
+            <div class="availability-box" id="availabilityBox" hidden>
+              <h3>Availability check</h3>
+              <p id="availabilityText"></p>
+            </div>
+
+            <div class="summary" id="summaryBox" hidden>
+              <h3>Request preview</h3>
+              <pre id="summaryText"></pre>
+            </div>
+
+            <div class="actions">
+              <button id="checkButton" type="button">Check availability</button>
+              <button id="submitButton" type="submit">Submit request</button>
+            </div>
+
+            <p class="status" id="statusMessage" aria-live="polite"></p>
+          </form>
+        </section>
+      </div>
     </section>
   </main>
 
