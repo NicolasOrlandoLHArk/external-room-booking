@@ -1,292 +1,423 @@
-:root {
-  --bg: #f5f6f8;
-  --card: #ffffff;
-  --panel: #ffffff;
-  --text: #1f2937;
-  --muted: #6b7280;
-  --border: #d1d5db;
-  --border-strong: #9ca3af;
-  --error: #b91c1c;
-  --ok: #065f46;
-  --ok-bg: #ecfdf5;
-  --ok-border: #a7f3d0;
-  --warn-bg: #fffbeb;
-  --warn-border: #fcd34d;
-  --button: #111827;
-  --button-text: #ffffff;
-  --button-secondary: #e5e7eb;
-  --button-secondary-text: #111827;
-  --button-disabled: #9ca3af;
-  --summary-bg: #f9fafb;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+const ROOM_LABELS = {
+  modelokale_stor: "Mødelokale stor",
+  modelokale_lille: "Mødelokale lille"
+};
+
+const EVENTS_URL = "./events.json";
+const FIELD_IDS = ["room", "date", "start", "end", "name", "company", "email", "comment"];
+
+const state = {
+  activeRoom: "modelokale_stor",
+  allEvents: [],
+  calendar: null,
+  eventsLoaded: false
+};
+
+const form = document.getElementById("bookingForm");
+const roomSelect = document.getElementById("room");
+const roomSwitch = document.getElementById("roomSwitch");
+const statusMessage = document.getElementById("statusMessage");
+const submitButton = document.getElementById("submitButton");
+const summaryBox = document.getElementById("summaryBox");
+const summaryText = document.getElementById("summaryText");
+const selectedRoomLabel = document.getElementById("selectedRoomLabel");
+const calendarLoading = document.getElementById("calendarLoading");
+const calendarError = document.getElementById("calendarError");
+const dateInput = document.getElementById("date");
+
+function initializePage() {
+  dateInput.min = getTodayLocalDateString();
+  roomSelect.value = state.activeRoom;
+  updateRoomUi(state.activeRoom);
+  bindEvents();
+  initializeCalendar();
+  loadEvents();
 }
 
-* {
-  box-sizing: border-box;
+function bindEvents() {
+  roomSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-room]");
+    if (!button) {
+      return;
+    }
+
+    setActiveRoom(button.dataset.room);
+  });
+
+  roomSelect.addEventListener("change", () => {
+    setActiveRoom(roomSelect.value);
+  });
+
+  form.addEventListener("submit", handleSubmit);
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+function initializeCalendar() {
+  if (!window.FullCalendar) {
+    showCalendarError("FullCalendar kunne ikke indlæses fra CDN.");
+    return;
+  }
+
+  const calendarElement = document.getElementById("calendar");
+
+  state.calendar = new FullCalendar.Calendar(calendarElement, {
+    initialView: window.innerWidth < 760 ? "listWeek" : "timeGridWeek",
+    locale: "da",
+    firstDay: 1,
+    height: "auto",
+    nowIndicator: true,
+    allDaySlot: false,
+    slotMinTime: "07:00:00",
+    slotMaxTime: "19:00:00",
+    slotDuration: "00:30:00",
+    expandRows: true,
+    eventTimeFormat: {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    },
+    headerToolbar: {
+      left: "prev,next today",
+      center: "title",
+      right: "timeGridWeek,dayGridMonth,listWeek"
+    },
+    buttonText: {
+      today: "I dag",
+      week: "Uge",
+      month: "Måned",
+      list: "Liste"
+    },
+    noEventsContent: "Ingen bookinger i den viste periode.",
+    events: []
+  });
+
+  state.calendar.render();
+  calendarLoading.hidden = true;
 }
 
-body {
-  min-height: 100vh;
-}
-
-.page {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 28px 18px;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-  padding: 24px;
-}
-
-.header {
-  margin-bottom: 24px;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-h1 {
-  margin: 0 0 10px;
-  font-size: 2rem;
-}
-
-h2 {
-  margin: 0 0 16px;
-  font-size: 1.2rem;
-}
-
-h3 {
-  margin: 0 0 10px;
-  font-size: 1rem;
-}
-
-.intro {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.top-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 20px;
-  align-items: start;
-}
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 18px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-}
-
-.field.full {
-  grid-column: 1 / -1;
-}
-
-label {
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-input,
-select,
-textarea,
-button {
-  font: inherit;
-}
-
-input,
-select,
-textarea {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  color: var(--text);
-  background: #fff;
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-  outline: 2px solid transparent;
-  border-color: var(--border-strong);
-}
-
-textarea {
-  min-height: 100px;
-  resize: vertical;
-}
-
-.error {
-  min-height: 18px;
-  margin: 6px 0 0;
-  font-size: 0.9rem;
-  color: var(--error);
-}
-
-.legend {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 0.95rem;
-}
-
-.calendar-loading {
-  margin: 8px 0 14px;
-  color: var(--muted);
-}
-
-#calendar {
-  min-height: 700px;
-  margin-top: 10px;
-}
-
-.availability-box,
-.summary {
-  margin-top: 18px;
-  padding: 14px;
-  border-radius: 12px;
-}
-
-.availability-box {
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-border);
-}
-
-.summary {
-  background: var(--summary-bg);
-  border: 1px solid var(--border);
-}
-
-.summary pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: Consolas, Monaco, monospace;
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 20px;
-}
-
-button {
-  border: 0;
-  border-radius: 10px;
-  padding: 12px 18px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-#checkButton {
-  background: var(--button-secondary);
-  color: var(--button-secondary-text);
-}
-
-#submitButton {
-  background: var(--button);
-  color: var(--button-text);
-}
-
-button:disabled {
-  background: var(--button-disabled);
-  color: #fff;
-  cursor: not-allowed;
-}
-
-.status {
-  margin-top: 16px;
-  min-height: 24px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.status.success {
-  color: var(--ok);
-  background: var(--ok-bg);
-  border: 1px solid var(--ok-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-
-.status.error {
-  color: var(--error);
-}
-
-@media (max-width: 1100px) {
-  .top-grid {
-    grid-template-columns: 1fr;
+async function loadEvents() {
+  try {
+    const rawData = await fetchAvailabilityData(state.activeRoom);
+    state.allEvents = normalizeEvents(rawData);
+    state.eventsLoaded = true;
+    calendarError.hidden = true;
+    refreshCalendarEvents();
+  } catch (error) {
+    state.allEvents = [];
+    state.eventsLoaded = false;
+    refreshCalendarEvents();
+    showCalendarError(error.message || "Kunne ikke indlæse bookings.");
   }
 }
 
-@media (max-width: 700px) {
-  .page {
-    padding: 18px 12px;
+function buildAvailabilityUrl(room) {
+  return EVENTS_URL;
+}
+
+async function fetchAvailabilityData(room) {
+  const response = await fetch(buildAvailabilityUrl(room), {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("events.json kunne ikke indlæses. Tjek at filen findes i samme mappe som index.html.");
   }
 
-  .card,
-  .panel {
-    padding: 16px;
+  return response.json();
+}
+
+function normalizeEvents(source) {
+  const events = Array.isArray(source)
+    ? source
+    : source && Array.isArray(source.events)
+      ? source.events
+      : null;
+
+  if (!events) {
+    throw new Error("events.json har ugyldigt format. Brug enten et array eller et objekt med en events-liste.");
   }
 
-  .grid {
-    grid-template-columns: 1fr;
+  return events
+    .map((event, index) => normalizeEvent(event, index))
+    .filter(Boolean);
+}
+
+function normalizeEvent(event, index) {
+  if (!event || typeof event !== "object") {
+    return null;
   }
 
-  .field.full {
-    grid-column: auto;
+  const room = typeof event.room === "string" ? event.room.trim() : "";
+  const start = typeof event.start === "string" ? event.start.trim() : "";
+  const end = typeof event.end === "string" ? event.end.trim() : "";
+
+  if (!ROOM_LABELS[room] || !start || !end) {
+    return null;
   }
 
-  h1 {
-    font-size: 1.6rem;
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+    return null;
   }
 
-  .actions {
-    flex-direction: column;
+  return {
+    id: String(event.id || `${room}-${index + 1}`),
+    room,
+    title: typeof event.title === "string" && event.title.trim() ? event.title.trim() : "Booked",
+    start,
+    end
+  };
+}
+
+function refreshCalendarEvents() {
+  if (!state.calendar) {
+    return;
   }
 
-  .actions button {
-    width: 100%;
+  state.calendar.removeAllEvents();
+
+  getEventsForRoom(state.activeRoom).forEach((event) => {
+    state.calendar.addEvent({
+      id: event.id,
+      title: event.title,
+      start: event.start,
+      end: event.end
+    });
+  });
+}
+
+function getEventsForRoom(room) {
+  return state.allEvents.filter((event) => event.room === room);
+}
+
+function setActiveRoom(room) {
+  if (!ROOM_LABELS[room]) {
+    return;
   }
 
-  #calendar {
-    min-height: 500px;
+  state.activeRoom = room;
+  roomSelect.value = room;
+  updateRoomUi(room);
+  refreshCalendarEvents();
+}
+
+function updateRoomUi(room) {
+  selectedRoomLabel.textContent = ROOM_LABELS[room];
+
+  Array.from(roomSwitch.querySelectorAll("[data-room]")).forEach((button) => {
+    const isActive = button.dataset.room === room;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+}
+
+function handleSubmit(event) {
+  event.preventDefault();
+  clearErrors();
+  setStatus("");
+  summaryBox.hidden = true;
+
+  if (!state.eventsLoaded) {
+    setStatus("Ledighedsdata er ikke tilgængelige lige nu. Prøv igen, når kalenderdata er indlæst.", "error");
+    return;
+  }
+
+  const payload = buildPayload();
+  const validation = validatePayload(payload);
+
+  if (!validation.valid) {
+    setStatus("Ret venligst felterne med fejl, før du sender forespørgslen.", "error");
+    return;
+  }
+
+  const overlapEvent = findOverlap(payload);
+
+  if (overlapEvent) {
+    setError("start", "Det valgte tidsrum overlapper med en eksisterende booking.");
+    setError("end", "Vælg et andet tidsrum eller et andet lokale.");
+    setStatus("Det valgte tidsrum er allerede booket.", "error");
+    return;
+  }
+
+  const submissionPayload = buildSubmissionPayload(payload);
+
+  submitButton.disabled = true;
+  renderSummary(submissionPayload);
+  setStatus("Forespørgslen ser god ud. Dette er en demo, så der er ikke oprettet en rigtig booking endnu.", "success");
+  submitButton.disabled = false;
+}
+
+function buildPayload() {
+  return {
+    room: getValue("room"),
+    date: getValue("date"),
+    start: getValue("start"),
+    end: getValue("end"),
+    name: getValue("name"),
+    company: getValue("company"),
+    email: getValue("email"),
+    comment: getValue("comment")
+  };
+}
+
+function validatePayload(payload) {
+  let valid = true;
+
+  if (!ROOM_LABELS[payload.room]) {
+    setError("room", "Vælg et lokale.");
+    valid = false;
+  }
+
+  if (!payload.date) {
+    setError("date", "Vælg en dato.");
+    valid = false;
+  } else if (payload.date < getTodayLocalDateString()) {
+    setError("date", "Datoen må ikke ligge i fortiden.");
+    valid = false;
+  }
+
+  if (!payload.start) {
+    setError("start", "Vælg et starttidspunkt.");
+    valid = false;
+  }
+
+  if (!payload.end) {
+    setError("end", "Vælg et sluttidspunkt.");
+    valid = false;
+  }
+
+  if (payload.date && payload.start && payload.end) {
+    const startDate = combineDateAndTime(payload.date, payload.start);
+    const endDate = combineDateAndTime(payload.date, payload.end);
+
+    if (!startDate || !endDate) {
+      setError("start", "Ugyldig dato eller tid.");
+      valid = false;
+    } else if (endDate <= startDate) {
+      setError("end", "Sluttid skal være senere end starttid.");
+      valid = false;
+    }
+  }
+
+  if (!payload.name) {
+    setError("name", "Indtast navn.");
+    valid = false;
+  }
+
+  if (!payload.email) {
+    setError("email", "Indtast email.");
+    valid = false;
+  } else if (!isValidEmail(payload.email)) {
+    setError("email", "Indtast en gyldig emailadresse.");
+    valid = false;
+  }
+
+  if (payload.company.length > 100) {
+    setError("company", "Firmanavn må maks. være 100 tegn.");
+    valid = false;
+  }
+
+  if (payload.comment.length > 500) {
+    setError("comment", "Kommentaren må maks. være 500 tegn.");
+    valid = false;
+  }
+
+  return { valid };
+}
+
+function findOverlap(payload) {
+  const requestedStart = combineDateAndTime(payload.date, payload.start);
+  const requestedEnd = combineDateAndTime(payload.date, payload.end);
+
+  if (!requestedStart || !requestedEnd) {
+    return null;
+  }
+
+  return getEventsForRoom(payload.room).find((event) => {
+    const eventStart = new Date(event.start);
+    const eventEnd = new Date(event.end);
+
+    if (Number.isNaN(eventStart.getTime()) || Number.isNaN(eventEnd.getTime())) {
+      return false;
+    }
+
+    return requestedStart < eventEnd && requestedEnd > eventStart;
+  }) || null;
+}
+
+function buildSubmissionPayload(payload) {
+  const startIso = `${payload.date}T${payload.start}:00`;
+  const endIso = `${payload.date}T${payload.end}:00`;
+
+  return {
+    room: payload.room,
+    roomLabel: ROOM_LABELS[payload.room],
+    date: payload.date,
+    startTime: payload.start,
+    endTime: payload.end,
+    start: startIso,
+    end: endIso,
+    name: payload.name,
+    company: payload.company,
+    email: payload.email,
+    comment: payload.comment,
+    requestedAt: new Date().toISOString()
+  };
+}
+
+function renderSummary(payload) {
+  summaryText.textContent = JSON.stringify(payload, null, 2);
+  summaryBox.hidden = false;
+}
+
+function getValue(id) {
+  return document.getElementById(id).value.trim();
+}
+
+function setError(id, message) {
+  const errorElement = document.getElementById(`${id}Error`);
+  if (errorElement) {
+    errorElement.textContent = message;
   }
 }
+
+function clearErrors() {
+  FIELD_IDS.forEach((id) => {
+    setError(id, "");
+  });
+}
+
+function setStatus(message, type) {
+  statusMessage.textContent = message;
+  statusMessage.className = "status-message";
+
+  if (type) {
+    statusMessage.classList.add(`is-${type}`);
+  }
+}
+
+function showCalendarError(message) {
+  calendarError.textContent = message;
+  calendarError.hidden = false;
+}
+
+function getTodayLocalDateString() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
+}
+
+function combineDateAndTime(dateString, timeString) {
+  const value = new Date(`${dateString}T${timeString}`);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+document.addEventListener("DOMContentLoaded", initializePage);

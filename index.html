@@ -1,125 +1,155 @@
 <!doctype html>
-<html lang="en">
+<html lang="da">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Meeting Room Booking</title>
-  <meta name="description" content="External meeting room booking page" />
-  <link rel="stylesheet" href="styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mødelokale booking</title>
+  <meta
+    name="description"
+    content="Meeting-room booking pilot for external users. View room availability and submit a booking request."
+  >
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <main class="page">
-    <section class="card">
-      <header class="header">
-        <p class="eyebrow">External booking</p>
-        <h1>Book a meeting room</h1>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Booking pilot</p>
+        <h1>Mødelokale booking</h1>
         <p class="intro">
-          Select a room to view its calendar. Existing bookings are shown below.
-          Then choose a free time slot and submit your request.
+          Se eksisterende bookinger for det valgte lokale og send en bookingforespørgsel.
+          Denne version validerer forespørgslen, tjekker overlap og viser payload-preview.
         </p>
-      </header>
+      </div>
+      <div class="hero-note">
+        <strong>Ingen backend endnu</strong>
+        <span>Data hentes midlertidigt fra en lokal <code>events.json</code>-fil.</span>
+      </div>
+    </section>
 
-      <div class="top-grid">
-        <section class="panel">
-          <h2>Calendar</h2>
+    <section class="layout" aria-label="Meeting room booking">
+      <div class="panel panel-calendar">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Kalender</p>
+            <h2>Ledighed pr. lokale</h2>
+          </div>
+          <div class="room-switch" id="roomSwitch" role="tablist" aria-label="Vælg lokale">
+            <button
+              type="button"
+              class="room-chip is-active"
+              data-room="modelokale_stor"
+              role="tab"
+              aria-selected="true"
+            >
+              Mødelokale stor
+            </button>
+            <button
+              type="button"
+              class="room-chip"
+              data-room="modelokale_lille"
+              role="tab"
+              aria-selected="false"
+            >
+              Mødelokale lille
+            </button>
+          </div>
+        </div>
 
-          <div class="field">
-            <label for="calendarRoom">Room</label>
-            <select id="calendarRoom">
-              <option value="modelokale_stor">Mødelokale stor</option>
-              <option value="modelokale_lille">Mødelokale lille</option>
-            </select>
+        <div class="calendar-shell">
+          <div class="calendar-meta">
+            <p class="active-room-label">
+              Viser kalender for
+              <strong id="selectedRoomLabel">Mødelokale stor</strong>
+            </p>
+            <p class="calendar-help">Bookede tider vises direkte i kalenderen.</p>
           </div>
 
-          <div class="legend">
-            <span><strong>Booked</strong> = occupied</span>
-            <span><strong>Available</strong> = no booking shown</span>
-          </div>
-
-          <div id="calendarLoading" class="calendar-loading">Loading calendar…</div>
+          <div id="calendarLoading" class="notice notice-loading">Loading calendar...</div>
+          <div id="calendarError" class="notice notice-error" hidden></div>
           <div id="calendar"></div>
-        </section>
+        </div>
+      </div>
 
-        <section class="panel">
-          <h2>Request booking</h2>
+      <div class="panel panel-form">
+        <div class="section-head compact">
+          <div>
+            <p class="section-kicker">Forespørgsel</p>
+            <h2>Send bookingønske</h2>
+          </div>
+        </div>
 
-          <form id="bookingForm" novalidate>
-            <div class="grid">
-              <div class="field full">
-                <label for="room">Room</label>
-                <select id="room" name="room" required>
-                  <option value="modelokale_stor">Mødelokale stor</option>
-                  <option value="modelokale_lille">Mødelokale lille</option>
-                </select>
-                <p class="error" id="roomError"></p>
-              </div>
-
-              <div class="field">
-                <label for="date">Date</label>
-                <input id="date" name="date" type="date" required />
-                <p class="error" id="dateError"></p>
-              </div>
-
-              <div class="field">
-                <label for="start">Start time</label>
-                <input id="start" name="start" type="time" required />
-                <p class="error" id="startError"></p>
-              </div>
-
-              <div class="field">
-                <label for="end">End time</label>
-                <input id="end" name="end" type="time" required />
-                <p class="error" id="endError"></p>
-              </div>
-
-              <div class="field full">
-                <label for="name">Your name</label>
-                <input id="name" name="name" type="text" maxlength="100" required />
-                <p class="error" id="nameError"></p>
-              </div>
-
-              <div class="field full">
-                <label for="company">Company</label>
-                <input id="company" name="company" type="text" maxlength="100" />
-                <p class="error" id="companyError"></p>
-              </div>
-
-              <div class="field full">
-                <label for="email">Email</label>
-                <input id="email" name="email" type="email" maxlength="150" required />
-                <p class="error" id="emailError"></p>
-              </div>
-
-              <div class="field full">
-                <label for="note">Comment</label>
-                <textarea id="note" name="note" rows="4" maxlength="500"></textarea>
-                <p class="error" id="noteError"></p>
-              </div>
+        <form id="bookingForm" novalidate>
+          <div class="form-grid">
+            <div class="field field-full">
+              <label for="room">Lokale</label>
+              <select id="room" name="room" required>
+                <option value="modelokale_stor">Mødelokale stor</option>
+                <option value="modelokale_lille">Mødelokale lille</option>
+              </select>
+              <p class="field-error" id="roomError"></p>
             </div>
 
-            <div class="availability-box" id="availabilityBox" hidden>
-              <h3>Availability check</h3>
-              <p id="availabilityText"></p>
+            <div class="field">
+              <label for="date">Dato</label>
+              <input id="date" name="date" type="date" required>
+              <p class="field-error" id="dateError"></p>
             </div>
 
-            <div class="summary" id="summaryBox" hidden>
-              <h3>Request preview</h3>
-              <pre id="summaryText"></pre>
+            <div class="field">
+              <label for="start">Start</label>
+              <input id="start" name="start" type="time" required>
+              <p class="field-error" id="startError"></p>
             </div>
 
-            <div class="actions">
-              <button id="checkButton" type="button">Check availability</button>
-              <button id="submitButton" type="submit">Submit request</button>
+            <div class="field">
+              <label for="end">Slut</label>
+              <input id="end" name="end" type="time" required>
+              <p class="field-error" id="endError"></p>
             </div>
 
-            <p class="status" id="statusMessage" aria-live="polite"></p>
-          </form>
-        </section>
+            <div class="field">
+              <label for="name">Navn</label>
+              <input id="name" name="name" type="text" maxlength="100" required>
+              <p class="field-error" id="nameError"></p>
+            </div>
+
+            <div class="field">
+              <label for="company">Firma</label>
+              <input id="company" name="company" type="text" maxlength="100">
+              <p class="field-error" id="companyError"></p>
+            </div>
+
+            <div class="field field-full">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" maxlength="150" required>
+              <p class="field-error" id="emailError"></p>
+            </div>
+
+            <div class="field field-full">
+              <label for="comment">Kommentar</label>
+              <textarea id="comment" name="comment" rows="4" maxlength="500"></textarea>
+              <p class="field-error" id="commentError"></p>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button id="submitButton" type="submit" class="primary-button">Send forespørgsel</button>
+          </div>
+
+          <p id="statusMessage" class="status-message" aria-live="polite"></p>
+
+          <section id="summaryBox" class="payload-preview" hidden>
+            <h3>Payload preview</h3>
+            <pre id="summaryText"></pre>
+          </section>
+        </form>
       </div>
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
