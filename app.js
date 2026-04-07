@@ -9,11 +9,14 @@ const ROOM_ICS_URLS = {
 };
 
 const API_CONFIG = {
-  availabilityBaseUrl: "",
-  bookingRequestUrl: ""
+  availabilityBaseUrl: "https://meeting-room-booking-api.no-022.workers.dev/api/availability",
+  bookingRequestUrl: "https://meeting-room-booking-api.no-022.workers.dev/api/booking-request"
 };
 
-const BOOKING_RECIPIENT = "booking@example.com";
+const BOOKING_RECIPIENTS = {
+  modelokale_stor: "Modelokale_stor@lhark.dk",
+  modelokale_lille: "Modelokale_Lille@lhark.dk"
+};
 const BOOKING_SUBJECT_PREFIX = "Booking request";
 const EVENTS_URL = "./events.json";
 const FIELD_IDS = ["room", "date", "start", "end", "name", "company", "email", "comment"];
@@ -881,18 +884,19 @@ function configureSubmittedState(payload, response) {
 function configureHandoff(payload) {
   const emailSubject = `${BOOKING_SUBJECT_PREFIX}: ${payload.roomLabel} ${payload.date} ${payload.startTime}-${payload.endTime}`;
   const emailBody = buildEmailBody(payload);
-  const hasRecipient = BOOKING_RECIPIENT && BOOKING_RECIPIENT !== "booking@example.com";
+  const recipient = BOOKING_RECIPIENTS[payload.room] || "";
+  const hasRecipient = Boolean(recipient);
 
   emailDraftLink.hidden = !hasRecipient;
   copyDetailsButton.hidden = false;
   copyPayloadButton.hidden = false;
 
   if (hasRecipient) {
-    emailDraftLink.href = buildMailtoLink(BOOKING_RECIPIENT, emailSubject, emailBody);
-    handoffNote.textContent = `Emailudkastet sendes til ${BOOKING_RECIPIENT}. Hvis brugerens emailprogram ikke åbner, kan detaljerne kopieres i stedet.`;
+    emailDraftLink.href = buildMailtoLink(recipient, emailSubject, emailBody);
+    handoffNote.textContent = `Emailudkastet sendes til ${recipient}. Hvis brugerens emailprogram ikke åbner, kan detaljerne kopieres i stedet.`;
   } else {
     emailDraftLink.removeAttribute("href");
-    handoffNote.textContent = "Sæt BOOKING_RECIPIENT i app.js før go-live. Indtil da kan bookingdetaljerne eller JSON kopieres herfra.";
+    handoffNote.textContent = "Der er ikke konfigureret en modtager for dette lokale endnu. Indtil da kan bookingdetaljerne eller JSON kopieres herfra.";
   }
 }
 
